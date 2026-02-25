@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import random
 from numbers import Number
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union

@@ -1,0 +1,1 @@
+ckpts/detseg_swin-b_coco_20260623-207453f5.pth filter=lfs diff=lfs merge=lfs -text

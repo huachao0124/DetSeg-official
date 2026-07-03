@@ -63,10 +63,6 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
-docs/en/_build/
-docs/zh_cn/_build/
-
 # PyBuilder
 target/
 
@@ -113,9 +109,9 @@ data
 *.pkl
 *.pkl.json
 *.log.json
-docs/modelzoo_statistics.md
 mmdet/.mim
 work_dirs/
+nohup_logs/
 outputs/
 ckpts
 bert-base-uncased

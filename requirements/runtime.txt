@@ -1,8 +1,15 @@
+fairscale
 matplotlib
-numpy
+mmsegmentation>=1.0.0
+numpy>=1.23.5,<2
+ood_metrics
+opencv-python-headless<5
+pillow
 pycocotools
+scikit-learn
 scipy
 shapely
 six
 terminaltables
 tqdm
+transformers>=4.38,<5

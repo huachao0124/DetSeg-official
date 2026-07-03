@@ -1,8 +1,39 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite the DetSeg paper."
 authors:
-  - name: "MMDetection Contributors"
-title: "OpenMMLab Detection Toolbox and Benchmark"
-date-released: 2018-08-22
-url: "https://github.com/open-mmlab/mmdetection"
+  - family-names: "Zhu"
+    given-names: "Huachao"
+  - family-names: "Liu"
+    given-names: "Zelong"
+  - family-names: "Sun"
+    given-names: "Zhichao"
+  - family-names: "Zou"
+    given-names: "Yuda"
+  - family-names: "Xia"
+    given-names: "Gui-Song"
+  - family-names: "Xu"
+    given-names: "Yongchao"
+title: "Beyond Pixel Uncertainty: Bounding the OoD Objects in Road Scenes"
+date-released: 2025-10-01
+url: "https://github.com/huachao0124/DetSeg-official"
 license: Apache-2.0
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: "Zhu"
+      given-names: "Huachao"
+    - family-names: "Liu"
+      given-names: "Zelong"
+    - family-names: "Sun"
+      given-names: "Zhichao"
+    - family-names: "Zou"
+      given-names: "Yuda"
+    - family-names: "Xia"
+      given-names: "Gui-Song"
+    - family-names: "Xu"
+      given-names: "Yongchao"
+  title: "Beyond Pixel Uncertainty: Bounding the OoD Objects in Road Scenes"
+  collection-title: "Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)"
+  year: 2025
+  start: 8472
+  end: 8481

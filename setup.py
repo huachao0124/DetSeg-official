@@ -154,9 +154,7 @@ def add_mim_extension():
     else:
         return
 
-    filenames = [
-        'tools', 'configs', 'demo', 'model-index.yml', 'dataset-index.yml'
-    ]
+    filenames = ['tools', 'configs']
     repo_path = osp.dirname(__file__)
     mim_path = osp.join(repo_path, 'mmdet', '.mim')
     os.makedirs(mim_path, exist_ok=True)
@@ -190,13 +188,12 @@ if __name__ == '__main__':
     setup(
         name='mmdet',
         version=get_version(),
-        description='OpenMMLab Detection Toolbox and Benchmark',
+        description='Official DetSeg implementation for road anomaly detection',
         long_description=readme(),
         long_description_content_type='text/markdown',
-        author='MMDetection Contributors',
-        author_email='openmmlab@gmail.com',
-        keywords='computer vision, object detection',
-        url='https://github.com/open-mmlab/mmdetection',
+        author='DetSeg Contributors',
+        keywords='road anomaly detection, object detection, open world detection',
+        url='https://github.com/huachao0124/DetSeg-official',
         packages=find_packages(exclude=('configs', 'tools', 'demo')),
         include_package_data=True,
         classifiers=[
@@ -204,20 +201,18 @@ if __name__ == '__main__':
             'License :: OSI Approved :: Apache Software License',
             'Operating System :: OS Independent',
             'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
             'Programming Language :: Python :: 3.9',
+            'Programming Language :: Python :: 3.10',
         ],
         license='Apache License 2.0',
         install_requires=parse_requirements('requirements/runtime.txt'),
         extras_require={
-            'all': parse_requirements('requirements.txt'),
-            'tests': parse_requirements('requirements/tests.txt'),
+            'all': (parse_requirements('requirements.txt') +
+                    parse_requirements('requirements/optional.txt')),
             'build': parse_requirements('requirements/build.txt'),
             'optional': parse_requirements('requirements/optional.txt'),
             'mim': parse_requirements('requirements/mminstall.txt'),
-            'tracking': parse_requirements('requirements/tracking.txt'),
-            'multimodal': parse_requirements('requirements/multimodal.txt'),
         },
         ext_modules=[],
         cmdclass={'build_ext': BuildExtension},

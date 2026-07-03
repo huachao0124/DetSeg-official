@@ -18,6 +18,12 @@ from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barc
 
 @METRICS.register_module()
 class AnomalyMetric(BaseMetric):
+    """Pixel-level anomaly metrics from segmentation logits.
+
+    The anomaly score is ``1 - max(ID class logits)`` over the 19 Cityscapes
+    in-distribution classes.
+    """
+
     METAINFO = dict(
         classes=('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
                  'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -48,30 +54,23 @@ class AnomalyMetric(BaseMetric):
         self.format_only = format_only
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
-        """Process one batch of data and data_samples.
+        """Collect segmentation logits and binary anomaly ground truth.
 
-        The processed results should be stored in ``self.results``, which will
-        be used to compute the metrics when all batches have been processed.
-
-        Args:
-            data_batch (dict): A batch of data from the dataloader.
-            data_samples (Sequence[dict]): A batch of outputs from the model.
+        Expects ``seg_logits.data`` to contain per-class segmentation logits and
+        ``gt_sem_seg.sem_seg`` to contain binary labels where 1 is anomaly and
+        0 is in-distribution. Other labels are ignored by the mask construction
+        in ``compute_metrics``.
         """
         for data_sample in data_samples:
             self.results.append((data_sample['seg_logits']['data'].cpu().numpy(), data_sample['gt_sem_seg']['sem_seg'].cpu().numpy()))
         
     
     def compute_metrics(self, results: list) -> Dict[str, float]:
-        """Compute the metrics from processed results.
+        """Compute AUPRC, FPR@95TPR, and AUROC from segmentation logits.
 
-        Args:
-            results (list): The processed results of each batch.
-
-        Returns:
-            Dict[str, float]: The computed metrics. The keys are the names of
-                the metrics, and the values are corresponding results. The key
-                mainly includes aAcc, mIoU, mAcc, mDice, mFscore, mPrecision,
-                mRecall.
+        Scores are flattened across all valid pixels. Anomaly pixels use label
+        1 and in-distribution pixels use label 0, matching the anomaly
+        segmentation protocol used in the paper tables.
         """
         logger: MMLogger = MMLogger.get_current_instance()
         if self.format_only:
@@ -133,6 +132,12 @@ class AnomalyMetric(BaseMetric):
 
 @METRICS.register_module()
 class AnomalyMetricRbA(BaseMetric):
+    """Pixel-level RbA-style anomaly metrics from segmentation logits.
+
+    The score follows the RbA-style energy form used in this project:
+    ``-sum(tanh(ID class logits))`` over the 19 Cityscapes classes.
+    """
+
     METAINFO = dict(
         classes=('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
                  'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -163,10 +168,21 @@ class AnomalyMetricRbA(BaseMetric):
         self.format_only = format_only
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
+        """Collect segmentation logits and binary anomaly ground truth.
+
+        Expects ``seg_logits.data`` to contain per-class segmentation logits.
+        ``compute_metrics`` converts those logits to an RbA-style anomaly score
+        before evaluating pixel-level OOD metrics.
+        """
         for data_sample in data_samples:
             self.results.append((data_sample['seg_logits']['data'].cpu().numpy(), data_sample['gt_sem_seg']['sem_seg'].cpu().numpy()))
     
     def compute_metrics(self, results: list) -> Dict[str, float]:
+        """Compute AUPRC, FPR@95TPR, and AUROC for RbA-style scores.
+
+        This metric evaluates the score derived from current model logits. It
+        does not load precomputed official RbA predictions from disk.
+        """
         logger: MMLogger = MMLogger.get_current_instance()
         if self.format_only:
             logger.info(f'results are saved to {osp.dirname(self.output_dir)}')
@@ -493,8 +509,18 @@ class IoUMetric(BaseMetric):
             })
         return ret_metrics
 
+# Metrics used by the DetSeg-S comparison experiments. The first reports
+# oracle best-threshold IoU for continuous score maps; the second reports direct
+# IoU for already-binarized masks.
 @METRICS.register_module()
-class AnomalyIoUMetric(BaseMetric):
+class OracleThresholdAnomalyIoUMetric(BaseMetric):
+    """Best-threshold anomaly IoU for continuous anomaly score maps.
+
+    This metric is intended for DetSeg-S comparison tables where the threshold
+    is selected with ground truth. It should not be interpreted as a deployable
+    fixed-threshold metric.
+    """
+
     METAINFO = dict(
         classes=('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
                  'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -525,17 +551,29 @@ class AnomalyIoUMetric(BaseMetric):
         self.format_only = format_only
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
+        """Collect continuous anomaly score maps and binary ground truth masks.
+
+        Expects ``pred_masks.sem_seg`` to contain a per-pixel anomaly score map
+        and ``gt_sem_seg.sem_seg`` to contain labels where 1 is anomaly, 0 is
+        in-distribution, and 255 is ignored.
+        """
         for data_sample in data_samples:
-            self.results.append((data_sample['pred_masks']['sem_seg'].cpu(), data_sample['gt_sem_seg']['sem_seg'].cpu(), data_sample['pred_instances']))
+            self.results.append((
+                data_sample['pred_masks']['sem_seg'].cpu(),
+                data_sample['gt_sem_seg']['sem_seg'].cpu()))
     
     def calculate_miou(self, gt_anomaly_map, pred_anomaly_map):
+        """Calculate mean anomaly IoU and F1 for binary prediction masks."""
         ious = []
         f1_scores = []
         for i in range(len(gt_anomaly_map)):
-            intersection = torch.logical_and(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1).sum().item()
-            union = torch.logical_or(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1).sum().item()
-            union = torch.logical_and(gt_anomaly_map[i]!=255, torch.logical_or(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1)).sum().item()
-            # union = torch.logical_or(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1).sum().item()
+            intersection = torch.logical_and(
+                gt_anomaly_map[i] == 1, pred_anomaly_map[i] == 1).sum().item()
+            union = torch.logical_and(
+                gt_anomaly_map[i] != 255,
+                torch.logical_or(
+                    gt_anomaly_map[i] == 1,
+                    pred_anomaly_map[i] == 1)).sum().item()
             if union == 0:
                 iou = 0
                 f1_score = 0
@@ -547,58 +585,42 @@ class AnomalyIoUMetric(BaseMetric):
         return np.mean(ious), np.mean(f1_scores)
 
     def compute_metrics(self, results: list) -> Dict[str, float]:
+        """Sweep score thresholds and report the oracle best anomaly IoU."""
         logger: MMLogger = MMLogger.get_current_instance()
         if self.format_only:
             logger.info(f'results are saved to {osp.dirname(self.output_dir)}')
             return OrderedDict()
         
         results = tuple(zip(*results))
-        # assert len(results) == 2
+        assert len(results) == 2
         
         pred_anomaly_maps = results[0]
         gt_anomaly_maps = torch.stack(results[1])
-        pred_instances = results[2]
         
-        ious = []
-        f1_scores = []
-        Best_miou = 0
-        Best_threshold = 0
-        threshold_list = []
-        num_set = 0
+        best_iou = 0
+        best_f1 = 0
+        best_threshold = 0
         step = 0.01
 
-        anomaly_list = []
-
-        # for masks, single_pred_instances in zip(pred_anomaly_maps, pred_instances):
-        #     anomaly = torch.zeros_like(masks[0]).float()
-        #     for mask, score in zip(masks, single_pred_instances['scores']):
-        #         anomaly[mask > 0] = score #       score
-        #     anomaly_list.append(anomaly)
-        
-        # anomaly = torch.stack(anomaly_list)
-
         anomaly = torch.stack(pred_anomaly_maps)
-        left, right = anomaly.min(), anomaly.max()
+        left = float(anomaly.min())
+        right = float(anomaly.max())
 
         for threshold in np.arange(left - step, right + step, step):
-            num_set += 1
-            threshold_list.append(threshold)
             anomaly_mask = torch.zeros_like(anomaly)
             anomaly_mask[anomaly > threshold] = 1
             iou, f1_score = self.calculate_miou(gt_anomaly_maps, anomaly_mask)
-            if iou > Best_miou:
-                Best_miou = iou
-                Best_threshold = threshold
-            ious.append(iou)
-            f1_scores.append(f1_score)   
-        f1_score = np.mean(f1_scores)
-        area = np.trapz(ious, threshold_list)
+            if iou > best_iou:
+                best_iou = iou
+                best_f1 = f1_score
+                best_threshold = threshold
 
         # summary
-        metrics = dict()
-        for key, val in zip(('IoU', 'F1'), (Best_miou, area)):
-            metrics[key] = np.round(val * 100, 2)
-        metrics = OrderedDict(metrics)
+        metrics = OrderedDict({
+            'BestIoU': np.round(best_iou * 100, 2),
+            'BestF1': np.round(best_f1 * 100, 2),
+            'BestThreshold': np.round(best_threshold, 4),
+        })
         metrics.update({'Dataset': 'FS_LF'})
         metrics.move_to_end('Dataset', last=False)
         class_table_data = PrettyTable()
@@ -612,7 +634,9 @@ class AnomalyIoUMetric(BaseMetric):
 
 
 @METRICS.register_module()
-class AnomalyIoUMetric2(BaseMetric):
+class BinaryMaskAnomalyIoUMetric(BaseMetric):
+    """Binary anomaly-mask IoU for DetSeg-S/SAM predictions."""
+
     METAINFO = dict(
         classes=('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
                  'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -643,16 +667,28 @@ class AnomalyIoUMetric2(BaseMetric):
         self.format_only = format_only
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
+        """Collect DetSeg-S binary anomaly masks and binary ground truth masks.
+
+        Expects ``pred_sem_seg.sem_seg`` to be an already-binarized anomaly
+        mask, not a continuous score map.
+        """
         for data_sample in data_samples:
-            self.results.append((data_sample['pred_sem_seg']['sem_seg'].cpu(), data_sample['gt_sem_seg']['sem_seg'].cpu(), data_sample['pred_instances']))
+            self.results.append((
+                data_sample['pred_sem_seg']['sem_seg'].cpu(),
+                data_sample['gt_sem_seg']['sem_seg'].cpu()))
     
     def calculate_miou(self, gt_anomaly_map, pred_anomaly_map):
+        """Calculate mean anomaly IoU and F1 for DetSeg-S binary masks."""
         ious = []
         f1_scores = []
         for i in range(len(gt_anomaly_map)):
-            intersection = torch.logical_and(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1).sum().item()
-            # union = torch.logical_or(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1).sum().item()
-            union = torch.logical_and(gt_anomaly_map[i]!=255, torch.logical_or(gt_anomaly_map[i]==1, pred_anomaly_map[i]==1)).sum().item()
+            intersection = torch.logical_and(
+                gt_anomaly_map[i] == 1, pred_anomaly_map[i] == 1).sum().item()
+            union = torch.logical_and(
+                gt_anomaly_map[i] != 255,
+                torch.logical_or(
+                    gt_anomaly_map[i] == 1,
+                    pred_anomaly_map[i] == 1)).sum().item()
             if union == 0:
                 iou = 0
                 f1_score = 0
@@ -661,21 +697,20 @@ class AnomalyIoUMetric2(BaseMetric):
                 f1_score = (2 * intersection) / (intersection + union)
             ious.append(iou)
             f1_scores.append(f1_score)
-            print(i, iou)
         return np.mean(ious), np.mean(f1_scores)
 
     def compute_metrics(self, results: list) -> Dict[str, float]:
+        """Report direct IoU/F1 for already-binarized DetSeg-S masks."""
         logger: MMLogger = MMLogger.get_current_instance()
         if self.format_only:
             logger.info(f'results are saved to {osp.dirname(self.output_dir)}')
             return OrderedDict()
         
         results = tuple(zip(*results))
-        # assert len(results) == 2
+        assert len(results) == 2
         
         pred_anomaly_maps = torch.stack(results[0])
         gt_anomaly_maps = torch.stack(results[1])
-        pred_instances = results[2]
         
         iou, f1_score = self.calculate_miou(gt_anomaly_maps, pred_anomaly_maps)
         # summary
@@ -699,6 +734,8 @@ class AnomalyIoUMetric2(BaseMetric):
 
 @METRICS.register_module()
 class AnomalyMetricLoad(BaseMetric):
+    """Pixel-level anomaly metrics for precomputed anomaly score maps."""
+
     METAINFO = dict(
         classes=('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
                  'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -729,10 +766,17 @@ class AnomalyMetricLoad(BaseMetric):
         self.format_only = format_only
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
+        """Collect externally supplied anomaly score maps and ground truth.
+
+        Expects ``anomaly_scores.data`` to be a per-pixel anomaly score map,
+        commonly loaded by ``GetAnomalyScoreMap`` or produced by DetSeg-R
+        post-processing.
+        """
         for data_sample in data_samples:
             self.results.append((data_sample['anomaly_scores']['data'].cpu().numpy(), data_sample['gt_sem_seg']['sem_seg'].cpu().numpy()))
     
     def compute_metrics(self, results: list) -> Dict[str, float]:
+        """Compute AUPRC, FPR@95TPR, and AUROC from anomaly score maps."""
         logger: MMLogger = MMLogger.get_current_instance()
         if self.format_only:
             logger.info(f'results are saved to {osp.dirname(self.output_dir)}')

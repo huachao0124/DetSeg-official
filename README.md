@@ -87,7 +87,8 @@ and SegmentMeIfYouCan are evaluation datasets.
 
 ## 📦 Model Zoo
 
-Place all model files under `ckpts/`.
+Place all model files under `ckpts/`. The DetSeg checkpoint is tracked by Git
+LFS; use `git lfs pull` after cloning, or download it from the link below.
 
 Released checkpoint:
 
@@ -102,7 +103,7 @@ Upstream pretrained weights:
 | Swin-B ImageNet-22K | [Swin Transformer][swin-b-22k] | `ckpts/swin_base_patch4_window12_384_22k.pth` | Backbone initialization |
 | MM-Grounding-DINO Swin-B pretrain-all | [OpenMMLab][mm-gdino-swin-b-all] | `ckpts/grounding_dino_swin-b_pretrain_all-f9818a7c.pth` | Detection-module initialization |
 
-[detseg-coco]: ckpts/detseg_swin-b_coco_20260623-207453f5.pth
+[detseg-coco]: https://media.githubusercontent.com/media/huachao0124/DetSeg-official/main/ckpts/detseg_swin-b_coco_20260623-207453f5.pth
 [swin-b-22k]: https://github.com/SwinTransformer/storage/releases/download/v1.0.0/swin_base_patch4_window12_384_22k.pth
 [mm-gdino-swin-b-all]: https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-b_pretrain_all/grounding_dino_swin-b_pretrain_all-f9818a7c.pth
 

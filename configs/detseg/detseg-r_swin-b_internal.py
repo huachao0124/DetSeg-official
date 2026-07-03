@@ -3,13 +3,17 @@ _base_ = [
     '../_base_/schedules/schedule_1x.py', '../_base_/default_runtime.py'
 ]
 
+custom_imports = dict(
+    imports=['mmdet.detseg_utils'], allow_failed_imports=False)
+
 crop_size = (1024, 512)
 
 pretrained = 'ckpts/swin_base_patch4_window12_384_22k.pth'  # noqa
-lang_model_name = './bert-base-uncased'
+lang_model_name = 'bert-base-uncased'
 
+# DetSeg-R config with the internal segmentation branch enabled.
 model = dict(
-    type='GroundingDINOPTSeg',
+    type='DetSegR',
     num_queries=900,
     with_box_refine=True,
     as_two_stage=True,
@@ -48,7 +52,7 @@ model = dict(
         with_cp=True,
         convert_weights=True,
         frozen_stages=-1,
-        init_cfg=dict(type='Pretrained', checkpoint=pretrained)),
+        init_cfg=None),
     neck=dict(
         type='ChannelMapper',
         in_channels=[256, 512, 1024],
@@ -95,7 +99,7 @@ model = dict(
     positional_encoding=dict(
         num_feats=128, normalize=True, offset=0.0, temperature=20),
     bbox_head=dict(
-        type='GroundingDINOHeadPT',
+        type='GroundingDINOHeadWithUniversalObjectness',
         num_classes=256,
         sync_cls_avg_factor=True,
         contrastive_cfg=dict(max_text_len=256, log_scale='auto', bias=True),
@@ -121,47 +125,14 @@ model = dict(
                 dict(type='IoUCost', iou_mode='giou', weight=2.0)
             ])),
     test_cfg=dict(max_per_img=300),
-    roi_head=dict(
-                type='SimpleRoIHead',
+    road_overlap_pooler=dict(
+                type='RoadOverlapRoIPooler',
                 bbox_roi_extractor=dict(
                     type='SingleRoIExtractor',
                     finest_scale=1,
                     roi_layer=dict(type='RoIAlign', output_size=1, sampling_ratio=0, pool_mode='avg'),
                     out_channels=1,
                     featmap_strides=[1])),
-    sam=dict(
-                type='SAM',
-                image_encoder_cfg=dict(
-                    type='mmpretrain.ViTSAM',
-                    arch='base',
-                    img_size=1024,
-                    patch_size=16,
-                    out_channels=256,
-                    use_abs_pos=True,
-                    use_rel_pos=True,
-                    window_size=14,
-                ),
-                prompt_encoder_cfg=dict(
-                    type='mmseg.PromptEncoder',
-                    embed_dim=256,
-                    image_embedding_size=(64, 64),
-                    input_image_size=(1024, 1024),
-                    mask_in_chans=16,
-                ),
-                mask_decoder_cfg=dict(
-                    type='mmseg.MaskDecoder',
-                    num_multimask_outputs=3,
-                    transformer=dict(
-                        type='mmseg.TwoWayTransformer',
-                        depth=2,
-                        embedding_dim=256,
-                        mlp_dim=2048,
-                        num_heads=8,
-                    ),
-                    transformer_dim=256,
-                    iou_head_depth=3,
-                    iou_head_hidden_dim=256,
-                )),
     seg_decoder=dict(
                 type='Mask2FormerHeadAnomaly',
                 in_channels=[128, 256, 512, 1024],
@@ -178,7 +149,7 @@ model = dict(
                     norm_cfg=dict(type='GN', num_groups=32),
                     act_cfg=dict(type='ReLU'),
                     encoder=dict(  # DeformableDetrTransformerEncoder
-                        num_layers=6,
+                        num_layers=1,
                         layer_cfg=dict(  # DeformableDetrTransformerEncoderLayer
                             self_attn_cfg=dict(  # MultiScaleDeformableAttention
                                 embed_dims=256,
@@ -205,7 +176,7 @@ model = dict(
                     num_feats=128, normalize=True),
                 transformer_decoder=dict(  # Mask2FormerTransformerDecoder
                     return_intermediate=True,
-                    num_layers=9,
+                    num_layers=1,
                     layer_cfg=dict(  # Mask2FormerTransformerDecoderLayer
                         self_attn_cfg=dict(  # MultiheadAttention
                             embed_dims=256,
@@ -249,7 +220,8 @@ model = dict(
                     naive_dice=True,
                     eps=1.0,
                     loss_weight=5.0),
-                loss_contrastive=dict(type='ContrastiveLoss'),
+                # loss_contrastive=dict(type='ContrastiveLoss'),
+                loss_contrastive=dict(type='RbALoss'),
                 train_cfg=dict(
                     num_points=12544,
                     oversample_ratio=3.0,
@@ -308,19 +280,17 @@ train_pipeline = [
 
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    # dict(type='Resize', scale=(2048, 1024)),
+    # dict(type='Resize', scale=(1024, 512)),
     dict(
         type='FixScaleResize',
         scale=(800, 1333),
         keep_ratio=True,
         backend='pillow'),
     dict(type='LoadAnnotations', with_bbox=False, with_seg=True),
-    dict(type='UnifyGT', label_map={0: 0, 2: 1}),
+    # dict(type='UnifyGT', label_map={0: 0, 2: 1}),
     dict(type='ConcatPrompt'),
-    dict(type='GetAnomalyScoreMap', data_path='other_score_results/score_results_m2a/RoadAnomaly'),
-    # dict(type='GetAnomalyScoreMap', data_path='./other_score_results/score_results_uno/RoadAnomaly'),
     dict(type='PackDetInputs', 
-         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape', 'anomaly_score_map',
+         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
                    'scale_factor', 'flip', 'flip_direction', 'text',
                    'custom_entities'))
 ]
@@ -328,17 +298,11 @@ test_pipeline = [
 # dataset settings
 train_dataset_type = 'CityscapesWithCocoDataset'
 train_data_root = 'data/cityscapes/'
-test_dataset_type = 'RoadAnomalyDataset'
-test_data_root = 'data/RoadAnomaly'
-# test_dataset_type = 'FSLostAndFoundDataset'
-# test_data_root = 'data/FS_LostFound'
-# test_data_root = 'data/FS_Static'
-# test_dataset_type = 'SMIYCDataset'
-# test_data_root = 'data/SMIYC/dataset_AnomalyTrack'
-
-# test_dataset_type = 'LostAndFoundDataset'
-# test_data_root = 'data/LostAndFound'
-
+# test_dataset_type = 'RoadAnomalyDataset'
+# test_data_root = 'data/RoadAnomaly'
+test_dataset_type = 'FSLostAndFoundDataset'
+# test_data_root = 'data/FS_LostFound/'
+test_data_root = 'data/FS_Static/'
 
 class_name = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole',
             'traffic light', 'traffic sign', 'vegetation', 'terrain',
@@ -372,21 +336,17 @@ val_dataloader = dict(dataset=dict(_delete_=True,
                                     type=test_dataset_type, 
                                     data_root=test_data_root, 
                                     pipeline=test_pipeline, 
-                                    img_suffix='.webp',
+                                    #  img_suffix='.webp',
                                     # img_suffix='.jpg',
                                     data_prefix=dict(
-                                        img_path='images', seg_map_path='labels_masks'),))
-                                        # img_path='original', seg_map_path='labels'),))
-                                        # img_path='leftImg8bit/test', seg_map_path='gtCoarse/test'),))
+                                        # img_path='images', seg_map_path='labels_masks'),))
+                                        img_path='original', seg_map_path='labels'),))
 test_dataloader = val_dataloader
-# val_evaluator = dict(type='AnomalyMetricRbA')
-# val_evaluator = dict(type='BlankMetric')
-val_evaluator = dict(type='AnomalyIoUMetric')
-# val_evaluator = dict(type='AnomalyMetricLoad')
+val_evaluator = dict(type='AnomalyMetricLoad')
 test_evaluator = val_evaluator
 
 # training schedule for 90k
-train_cfg = dict(_delete_=True, type='IterBasedTrainLoop', max_iters=5000, val_interval=5000)
+train_cfg = dict(_delete_=True, type='IterBasedTrainLoop', max_iters=5000, val_interval=1000)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 default_hooks = dict(
@@ -394,16 +354,16 @@ default_hooks = dict(
     logger=dict(type='LoggerHook', interval=50, log_metric_by_epoch=False),
     param_scheduler=dict(type='ParamSchedulerHook'),
     checkpoint=dict(
-        type='CheckpointHook', by_epoch=False, interval=5000),
+        type='CheckpointHook', by_epoch=False, interval=1000),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     # visualization=dict(type='SegVisualizationWithResizeHook', draw=True, interval=1))
-    visualization=dict(type='GroundingVisualizationHook', draw=False, interval=1, score_thr=0.0))
+    visualization=dict(type='GroundingVisualizationHook', draw=False, interval=5, score_thr=0.1))
 
 vis_backends = [dict(type='LocalVisBackend')]
-# visualizer = dict(
-#     type='VisualizerHeatMap', vis_backends=vis_backends, name='visualizer')
 visualizer = dict(
-    type='DetLocalVisualizer', vis_backends=vis_backends, name='visualizer')
+    type='VisualizerHeatMap', vis_backends=vis_backends, name='visualizer')
+# visualizer = dict(
+#     type='DetLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 log_processor = dict(by_epoch=False)
 # Default setting for scaling LR automatically
 #   - `enable` means enable scaling LR automatically
@@ -411,4 +371,4 @@ log_processor = dict(by_epoch=False)
 #   - `base_batch_size` = (8 GPUs) x (2 samples per GPU).
 auto_scale_lr = dict(enable=True, base_batch_size=16)
 
-load_from = 'work_dirs/grounding_dino_bbyy_swin-b_seg_cityscapes/iter_90000.pth'
+load_from = None

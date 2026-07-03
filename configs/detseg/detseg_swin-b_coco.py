@@ -3,11 +3,14 @@ _base_ = [
     '../_base_/schedules/schedule_1x.py', '../_base_/default_runtime.py'
 ]
 
+custom_imports = dict(
+    imports=['mmdet.detseg_utils'], allow_failed_imports=False)
+
 pretrained = 'ckpts/swin_base_patch4_window12_384_22k.pth'
-lang_model_name = './bert-base-uncased'
+lang_model_name = 'bert-base-uncased'
 
 model = dict(
-    type='GroundingDINOPT',
+    type='DetSeg',
     num_queries=900,
     with_box_refine=True,
     as_two_stage=True,
@@ -45,7 +48,7 @@ model = dict(
         with_cp=True,
         convert_weights=True,
         frozen_stages=-1,
-        init_cfg=dict(type='Pretrained', checkpoint=pretrained)),
+        init_cfg=None),
     neck=dict(
         type='ChannelMapper',
         in_channels=[256, 512, 1024],
@@ -92,7 +95,7 @@ model = dict(
     positional_encoding=dict(
         num_feats=128, normalize=True, offset=0.0, temperature=20),
     bbox_head=dict(
-        type='GroundingDINOHeadTB',
+        type='GroundingDINOHeadWithUniversalObjectness',
         num_classes=256,
         sync_cls_avg_factor=True,
         contrastive_cfg=dict(max_text_len=256, log_scale='auto', bias=True),
@@ -101,8 +104,8 @@ model = dict(
             use_sigmoid=True,
             gamma=2.0,
             alpha=0.25,
-            loss_weight=1.0),  # 2.0 in DeformDETR
-        loss_bbox=dict(type='L1Loss', loss_weight=5.0)),
+            loss_weight=5.0),  # 2.0 in DeformDETR
+        loss_bbox=dict(type='L1Loss', loss_weight=2.0)),
     dn_cfg=dict(  # TODO: Move to model.train_cfg ?
         label_noise_scale=0.5,
         box_noise_scale=1.0,  # 0.4 for DN-DETR
@@ -113,15 +116,15 @@ model = dict(
         assigner=dict(
             type='HungarianAssigner',
             match_costs=[
-                dict(type='FocalLossCost', weight=2.0),
+                dict(type='FocalLossCost', weight=4.0),
                 dict(type='BBoxL1Cost', weight=5.0, box_format='xywh'),
-                dict(type='IoUCost', iou_mode='giou', weight=2.0)
+                # dict(type='IoUCost', iou_mode='giou', weight=2.0)
             ])),
     test_cfg=dict(max_per_img=300))
 
 # dataset settings
 train_pipeline = [
-    dict(type='LoadImageFromFile', backend_args=_base_.backend_args),
+    dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='RandomFlip', prob=0.5),
     dict(
@@ -155,7 +158,6 @@ train_pipeline = [
                     keep_ratio=True)
             ]
         ]),
-    dict(type='FilterAnnotations', min_gt_bbox_wh=(1e-2, 1e-2)),
     # dict(
     #     type='RandomSamplingNegPos',
     #     tokenizer_name=lang_model_name,
@@ -170,7 +172,7 @@ train_pipeline = [
                    'custom_entities', 'tokens_positive', 'dataset_mode'))
 ]
 
-test_pipeline = [
+val_pipeline = [
     dict(
         type='LoadImageFromFile', backend_args=None,
         imdecode_backend='pillow'),
@@ -180,6 +182,7 @@ test_pipeline = [
         keep_ratio=True,
         backend='pillow'),
     dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='ReplacePrompt'),
     dict(type='ConcatPrompt'),
     dict(
         type='PackDetInputs',
@@ -188,32 +191,50 @@ test_pipeline = [
                    'tokens_positive'))
 ]
 
-dataset_type = 'ODVGDataset'
-data_root = 'data/objects365v1/'
+dataset_type = 'CocoDataset'
+data_root = 'data/coco/'
 
-coco_od_dataset = dict(
-    type=dataset_type,
-    data_root=data_root,
-    ann_file='objects365_train_od.json',
-    label_map_file='o365v1_label_map.json',
-    data_prefix=dict(img='train/'),
-    filter_cfg=dict(filter_empty_gt=False),
-    pipeline=train_pipeline,
-    return_classes=True,
-    backend_args=None)
 
 train_dataloader = dict(
-    _delete_=True,
-    batch_size=4,
-    num_workers=4,
+    batch_size=2,
+    num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     batch_sampler=dict(type='AspectRatioBatchSampler'),
-    dataset=dict(type='ConcatDataset', datasets=[coco_od_dataset]))
+    dataset=dict(
+        _delete_=True,
+        type='CocoDataset',
+        data_root=data_root,
+        ann_file='annotations/instances_train2017.json',
+        data_prefix=dict(img='train2017/'),
+        return_classes=True,
+        filter_cfg=dict(filter_empty_gt=False, min_size=0),
+        pipeline=train_pipeline))
 
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, return_classes=True))
+    batch_size=1,
+    num_workers=2,
+    persistent_workers=True,
+    drop_last=False,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        _delete_=True,
+        type='CocoDataset',
+        data_root=data_root,
+        ann_file='annotations/instances_val2017.json',
+        data_prefix=dict(img='val2017/'),
+        return_classes=True,
+        test_mode=True,
+        pipeline=val_pipeline))
 test_dataloader = val_dataloader
+
+val_evaluator = dict(
+    type='CocoMetric',
+    ann_file=data_root + 'annotations/instances_val2017.json',
+    metric='proposal',
+    proposal_nums=(100, 300),
+    metric_items=['AR@100', 'AR@300'])
+test_evaluator = val_evaluator
 
 optim_wrapper = dict(
     _delete_=True,
@@ -258,7 +279,7 @@ param_scheduler = [
         gamma=0.1)
 ]
 
-train_cfg = dict(_delete_=True, type='IterBasedTrainLoop', max_iters=38038, val_interval=39000)
+train_cfg = dict(_delete_=True, type='IterBasedTrainLoop', max_iters=38038, val_interval=1000)
 
 # NOTE: `auto_scale_lr` is for automatically scaling LR,
 # USER SHOULD NOT CHANGE ITS VALUES.
@@ -267,7 +288,7 @@ train_cfg = dict(_delete_=True, type='IterBasedTrainLoop', max_iters=38038, val_
 auto_scale_lr = dict(base_batch_size=16)
 
 default_hooks = dict(visualization=dict(type='GroundingVisualizationHook'),
-                     checkpoint=dict(type='CheckpointHook', interval=5000, by_epoch=False),)
+                     checkpoint=dict(type='CheckpointHook', interval=1000, by_epoch=False),)
 
 load_from = 'ckpts/grounding_dino_swin-b_pretrain_all-f9818a7c.pth'
-# load_from = 'https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-b_pretrain_obj365_goldg_v3det/grounding_dino_swin-b_pretrain_obj365_goldg_v3de-f83eef00.pth'  # noqa
+# load_from = 'https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-b_pretrain_all/grounding_dino_swin-b_pretrain_all-f9818a7c.pth'  # noqa

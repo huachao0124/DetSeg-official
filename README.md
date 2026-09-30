@@ -1,8 +1,18 @@
-# Beyond Pixel Uncertainty: Bounding the OoD Objects in Road Scenes
+# DetSeg — Beyond Pixel Uncertainty for Road Anomaly Segmentation
+
+- **Object-level OoD localization**
+- **Threshold-free anomaly segmentation**
+- **Up to 37.45% FPR95 reduction**
+
+Official **ICCV 2025** implementation of **DetSeg** for road anomaly / out-of-distribution (OoD) segmentation with object-level understanding.
+
+**Paper:** [Beyond Pixel Uncertainty: Bounding the OoD Objects in Road Scenes](https://openaccess.thecvf.com/content/ICCV2025/html/Zhu_Beyond_Pixel_Uncertainty_Bounding_the_OoD_Objects_in_Road_Scenes_ICCV_2025_paper.html)
+
+[Paper PDF](https://openaccess.thecvf.com/content/ICCV2025/papers/Zhu_Beyond_Pixel_Uncertainty_Bounding_the_OoD_Objects_in_Road_Scenes_ICCV_2025_paper.pdf)
+
+DetSeg-𝓡 refines existing anomaly score maps to reduce false positives; DetSeg-𝓢 produces binary anomaly masks without an anomaly-score threshold search. The FPR95 reduction above is the maximum reported in the paper for refining previous methods.
 
 ![DetSeg framework](docs/framework.png)
-
-This is the official implementation of **"DetSeg: A Novel Paradigm for Road Anomaly Detection with Object-Level Understanding"** (ICCV 2025).
 
 ## 📋 Abstract
 
@@ -11,12 +21,6 @@ Recognizing out-of-distribution (OoD) objects on roads is crucial for safe drivi
 We propose **DetSeg**, a novel paradigm that helps incorporate object-level understanding. DetSeg first detects all objects in the open world and then suppresses in-distribution (ID) bounding boxes, leaving only OoD proposals. These proposals can either help previous methods eliminate false positives (**DetSeg-𝓡**), or generate binary anomaly masks without complex threshold search when combined with a box-prompted segmentation module (**DetSeg-𝓢**).
 
 Additionally, we introduce **vanishing point guided Hungarian matching (VPHM)** to smooth the prediction results within a video clip, mitigating abrupt variations of predictions between consecutive frames.
-
-## ✨ Highlights
-
-- 🚀 **Object-Level Understanding**: Leverages detection to suppress false positives at ambiguous regions
-- 🎯 **Two Variants**: DetSeg-𝓡 (refine existing methods) & DetSeg-𝓢 (threshold-free segmentation)
-- 📉 **Up to 37.45% FPR₉₅ reduction** compared to previous methods
 
 ## 🛠️ Installation
 

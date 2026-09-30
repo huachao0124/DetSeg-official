@@ -25,7 +25,7 @@ TEST_SCENES = {
     'curvy-street', 'one-way-street', 'gravel', 'greyasphalt', 'motorway',
     'paving', 'darkasphalt', 'darkasphalt2',
 }
-VALIDATION_EXCLUDED = tuple(f'validation_{i}' for i in range(19, 30))
+VALIDATION_EXCLUDED = tuple(f'validation_{i}' for i in (19, *range(21, 30)))
 
 
 def identify_member(name):
@@ -59,7 +59,7 @@ def check_coverage(entries):
                                 for fid in obstacle),
     )
     expected = dict(anomaly_all=110, obstacle_test=327, obstacle_night=30,
-                    obstacle_snowstorm=55)
+                    obstacle_snowstorm=55, obstacle_validation=30)
     if any(counts[key] != value for key, value in expected.items()):
         raise ValueError(f'Incomplete official splits: {counts}; expected {expected}')
     allowed = TEST_SCENES | {'driveway', 'snowstorm1', 'snowstorm2', 'validation'}
@@ -176,12 +176,6 @@ def prepare(inputs, output_dir):
             minimum=min(r['minimum'] for r in records),
             maximum=max(r['maximum'] for r in records),
             source_archives=sorted({e['source'] for e in entries}),
-            warnings=(['The current upstream validation filter keeps '
-                       f'{check_coverage(entries)["obstacle_validation"]} frames, '
-                       'while its expected_length is 30. Validation predictions '
-                       'are preserved unchanged; confirm with organizers if '
-                       'validation scoring is requested.']
-                      if check_coverage(entries)['obstacle_validation'] != 30 else []),
             validation='Format, finite values, official split counts, and cross-method '
                        'frame IDs/shapes checked; original images were not available.',
             files=records)

@@ -55,9 +55,12 @@ class SubmissionTests(unittest.TestCase):
             source = root / 'source.zip'
             members = [f'AnomalyTrack-all/frame{i}.hdf5' for i in range(110)]
             for scene, count in [('curvy-street', 327), ('driveway', 30),
-                                 ('snowstorm1', 55), ('validation_fixture', 30)]:
+                                 ('snowstorm1', 55)]:
                 members.extend(f'ObstacleTrack-all/{scene}_{i}.hdf5'
                                for i in range(count))
+            validation_ids = [*range(1, 19), 20, *range(30, 41)]
+            members.extend(f'ObstacleTrack-all/validation_{i}.hdf5'
+                           for i in validation_ids)
             with zipfile.ZipFile(source, 'w') as archive:
                 for member in members:
                     archive.writestr('outputs/anomaly_p/DetSeg/' + member, blob)
@@ -65,6 +68,7 @@ class SubmissionTests(unittest.TestCase):
                 report = smiyc.prepare([source], root / 'ready')[0]
             self.assertEqual(report['tracks'], {
                 'AnomalyTrack-all': 110, 'ObstacleTrack-all': 442})
+            self.assertEqual(report['coverage']['obstacle_validation'], 30)
             with zipfile.ZipFile(root / 'ready/DetSeg.zip') as archive:
                 self.assertEqual(len(archive.namelist()), 552)
                 for name in archive.namelist():

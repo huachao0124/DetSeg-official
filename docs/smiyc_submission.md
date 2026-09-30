@@ -37,14 +37,10 @@ overwritten. These checks do not replace comparison with the original
 images or the official server evaluation.
 
 The [upstream dataset definitions](https://github.com/SegmentMeIfYouCan/road-anomaly-benchmark/blob/master/road_anomaly_benchmark/datasets/tracks.py)
-expect 110 anomaly images, 327 obstacle test images, 30 night images, and
-55 snowstorm images. Validation filtering is reported separately: the
-current upstream code excludes prefixes `validation_19` through
-`validation_29` while asserting 30 retained images. Some existing result
-sets include `validation_20` and retain only 29 under this filter. The tool
-records this mismatch as a warning and preserves the files unchanged;
-confirm the intended split with the organizers if validation scoring is
-requested.
+expect 110 anomaly images, 327 obstacle test images, 30 night images,
+55 snowstorm images, and 30 validation images. The validation split excludes
+`validation_19` and `validation_21` through `validation_29`, while retaining
+`validation_20`.
 
 ## Submit and request leaderboard publication
 

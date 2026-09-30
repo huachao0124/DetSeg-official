@@ -208,6 +208,12 @@ DetSeg-S prompts SAM with retained DetSeg boxes and evaluates binary masks:
 python tools/test.py configs/detseg/detseg-s_swin-b.py ckpt_path
 ```
 
+### SMIYC Official Submission
+
+See the [SMIYC submission guide](docs/smiyc_submission.md) to validate
+saved predictions, package both tracks for Codabench, and request inclusion
+in the official leaderboard.
+
 ## 📝 Citation
 
 If you find this work helpful, please consider citing:
